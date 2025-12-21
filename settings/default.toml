@@ -1,0 +1,22 @@
+# _name = "bzd-feeds"
+
+[http]
+endpoint = "0.0.0.0:3000"
+
+[db]
+endpoint = "postgres://postgres:postgres@0.0.0.0:5432/bzd_feeds"
+
+[nats]
+endpoint = "0.0.0.0:4222"
+stream = "bzd"
+
+[feeds.messaging.message]
+subjects = ["bzd.messages.events.message"]
+consumer = "bzd-feeds-message"
+
+[feeds.messaging.topic_user]
+subjects = ["bzd.messages.events.topic_user"]
+consumer = "bzd-feeds-topic-user"
+
+[feeds.processing]
+batch_size = 5

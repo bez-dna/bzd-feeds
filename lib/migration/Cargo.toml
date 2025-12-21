@@ -2,10 +2,6 @@
 name = "bzd-feeds-migration"
 edition = "2024"
 
-[lib]
-name = "migration"
-path = "src/lib.rs"
-
 [dependencies]
 async-std = { version = "1", features = ["attributes", "tokio1"] }
 
