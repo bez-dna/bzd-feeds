@@ -82,6 +82,7 @@ pub async fn mark_tasks_as_locked<T: ConnectionTrait>(
 ) -> Result<(), AppError> {
     task::Entity::update_many()
         .col_expr(task::Column::LockedAt, Expr::value(locked_at))
+        .col_expr(task::Column::UpdatedAt, Expr::value(Utc::now().naive_utc()))
         .filter(task::Column::TaskId.is_in(task_ids))
         .exec(db)
         .await?;
@@ -104,6 +105,7 @@ pub async fn unlock_task<T: ConnectionTrait>(
     let mut model = model.into_active_model();
 
     model.payload = Set(payload);
+    model.updated_at = Set(Utc::now().naive_utc());
 
     model.update(db).await?;
 
