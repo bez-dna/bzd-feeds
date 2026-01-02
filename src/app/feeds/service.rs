@@ -4,7 +4,10 @@ use uuid::Uuid;
 
 use crate::app::{
     error::AppError,
-    feeds::repo::{self, EntryModel, TaskModel},
+    feeds::{
+        repo::{self, EntryModel, TaskModel},
+        settings::FeedsSettings,
+    },
 };
 
 pub async fn create_message(db: &DbConn, req: create_message::Request) -> Result<(), AppError> {
@@ -197,6 +200,216 @@ pub mod handle_topic_user {
             // );
 
             Ok(())
+        }
+    }
+}
+
+pub async fn get_user_entries(
+    db: &DbConn,
+    settings: &FeedsSettings,
+    req: get_user_entries::Request,
+) -> Result<get_user_entries::Response, AppError> {
+    let limit = settings.limits.user;
+
+    let mut entries =
+        repo::get_entries_by_user_id(db, req.user_id, req.cursor_entry_id, limit + 1).await?;
+
+    let cursor_entry =
+        if entries.len() > usize::try_from(limit).map_err(|_| AppError::Unreachable)? {
+            entries.pop()
+        } else {
+            None
+        };
+
+    Ok(get_user_entries::Response {
+        entries,
+        cursor_entry,
+    })
+}
+
+pub mod get_user_entries {
+    use uuid::Uuid;
+
+    use crate::app::feeds::repo::EntryModel;
+
+    #[derive(Clone)]
+    pub struct Request {
+        pub user_id: Uuid,
+        pub cursor_entry_id: Option<Uuid>,
+    }
+
+    pub struct Response {
+        pub entries: Vec<EntryModel>,
+        pub cursor_entry: Option<EntryModel>,
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use bzd_lib::{error::Error, settings::NATSConsumerSettings};
+        use sea_orm::{DatabaseBackend, MockDatabase, Transaction};
+        use uuid::Uuid;
+
+        use crate::app::feeds::{
+            repo::EntryModel,
+            service::{self, get_user_entries::Request},
+            settings::{FeedsSettings, LimitsSettings, MessagingSettings, ProcessingSettings},
+        };
+
+        #[tokio::test]
+        async fn test_ok_get_without_cursor() -> Result<(), Error> {
+            let entries = vec![EntryModel::stub(); 5];
+
+            let db = MockDatabase::new(DatabaseBackend::Postgres)
+                .append_query_results([entries.clone()])
+                .into_connection();
+
+            let req = Request {
+                user_id: Uuid::now_v7(),
+                cursor_entry_id: None,
+            };
+
+            let settings = test_settings(4);
+
+            let res = service::get_user_entries(&db, &settings, req.clone()).await?;
+
+            assert_eq!(res.entries.len(), 4);
+            assert_eq!(res.entries.first(), entries.first());
+            assert_eq!(res.cursor_entry.as_ref(), entries.last());
+
+            assert_eq!(
+                db.into_transaction_log(),
+                [Transaction::from_sql_and_values(
+                    DatabaseBackend::Postgres,
+                    r#"SELECT "entries"."entry_id", "entries"."user_id", "entries"."message_id", "entries"."topic_user_ids", "entries"."created_at", "entries"."updated_at" FROM "entries" WHERE "entries"."user_id" = $1 ORDER BY "entries"."entry_id" DESC LIMIT $2"#,
+                    [req.user_id.into(), (settings.limits.user + 1).into()]
+                ),]
+            );
+
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn test_ok_get_without_cursor_and_last() -> Result<(), Error> {
+            let entries = vec![EntryModel::stub(); 4];
+
+            let db = MockDatabase::new(DatabaseBackend::Postgres)
+                .append_query_results([entries.clone()])
+                .into_connection();
+
+            let req = Request {
+                user_id: Uuid::now_v7(),
+                cursor_entry_id: None,
+            };
+
+            let settings = test_settings(4);
+
+            let res = service::get_user_entries(&db, &settings, req.clone()).await?;
+
+            assert_eq!(res.entries.len(), 4);
+            assert_eq!(res.entries.first(), entries.first());
+            assert_eq!(res.cursor_entry, None);
+
+            assert_eq!(
+                db.into_transaction_log(),
+                [Transaction::from_sql_and_values(
+                    DatabaseBackend::Postgres,
+                    r#"SELECT "entries"."entry_id", "entries"."user_id", "entries"."message_id", "entries"."topic_user_ids", "entries"."created_at", "entries"."updated_at" FROM "entries" WHERE "entries"."user_id" = $1 ORDER BY "entries"."entry_id" DESC LIMIT $2"#,
+                    [req.user_id.into(), (settings.limits.user + 1).into()]
+                ),]
+            );
+
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn test_ok_get_with_cursor() -> Result<(), Error> {
+            let entries = vec![EntryModel::stub(); 5];
+
+            let db = MockDatabase::new(DatabaseBackend::Postgres)
+                .append_query_results([entries.clone()])
+                .into_connection();
+
+            let req = Request {
+                user_id: Uuid::now_v7(),
+                cursor_entry_id: Some(Uuid::now_v7()),
+            };
+
+            let settings = test_settings(4);
+
+            let res = service::get_user_entries(&db, &settings, req.clone()).await?;
+
+            assert_eq!(res.entries.len(), 4);
+            assert_eq!(res.entries.first(), entries.first());
+            assert_eq!(res.cursor_entry.as_ref(), entries.last());
+
+            assert_eq!(
+                db.into_transaction_log(),
+                [Transaction::from_sql_and_values(
+                    DatabaseBackend::Postgres,
+                    r#"SELECT "entries"."entry_id", "entries"."user_id", "entries"."message_id", "entries"."topic_user_ids", "entries"."created_at", "entries"."updated_at" FROM "entries" WHERE "entries"."user_id" = $1 AND "entries"."entry_id" <= $2 ORDER BY "entries"."entry_id" DESC LIMIT $3"#,
+                    [
+                        req.user_id.into(),
+                        req.cursor_entry_id.into(),
+                        (settings.limits.user + 1).into()
+                    ]
+                ),]
+            );
+
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn test_ok_get_with_cursor_and_last() -> Result<(), Error> {
+            let entries = vec![EntryModel::stub(); 4];
+
+            let db = MockDatabase::new(DatabaseBackend::Postgres)
+                .append_query_results([entries.clone()])
+                .into_connection();
+
+            let req = Request {
+                user_id: Uuid::now_v7(),
+                cursor_entry_id: Some(Uuid::now_v7()),
+            };
+
+            let settings = test_settings(4);
+
+            let res = service::get_user_entries(&db, &settings, req.clone()).await?;
+
+            assert_eq!(res.entries.len(), 4);
+            assert_eq!(res.entries.first(), entries.first());
+            assert_eq!(res.cursor_entry.as_ref(), None);
+
+            assert_eq!(
+                db.into_transaction_log(),
+                [Transaction::from_sql_and_values(
+                    DatabaseBackend::Postgres,
+                    r#"SELECT "entries"."entry_id", "entries"."user_id", "entries"."message_id", "entries"."topic_user_ids", "entries"."created_at", "entries"."updated_at" FROM "entries" WHERE "entries"."user_id" = $1 AND "entries"."entry_id" <= $2 ORDER BY "entries"."entry_id" DESC LIMIT $3"#,
+                    [
+                        req.user_id.into(),
+                        req.cursor_entry_id.into(),
+                        (settings.limits.user + 1).into()
+                    ]
+                ),]
+            );
+
+            Ok(())
+        }
+
+        fn test_settings(limit: u64) -> FeedsSettings {
+            FeedsSettings {
+                limits: LimitsSettings { user: limit },
+                messaging: MessagingSettings {
+                    message: NATSConsumerSettings {
+                        subjects: vec![],
+                        consumer: String::new(),
+                    },
+                    topic_user: NATSConsumerSettings {
+                        subjects: vec![],
+                        consumer: String::new(),
+                    },
+                },
+                processing: ProcessingSettings { batch_size: 0 },
+            }
         }
     }
 }

@@ -162,3 +162,22 @@ pub async fn create_entry<T: ConnectionTrait>(db: &T, model: EntryModel) -> Resu
 
     Ok(())
 }
+
+pub async fn get_entries_by_user_id<T: ConnectionTrait>(
+    db: &T,
+    user_id: Uuid,
+    cursor_entry_id: Option<Uuid>,
+    limit: u64,
+) -> Result<Vec<EntryModel>, AppError> {
+    let entries = entry::Entity::find()
+        .filter(entry::Column::UserId.eq(user_id))
+        .apply_if(cursor_entry_id, |query, v| {
+            query.filter(entry::Column::EntryId.lte(v))
+        })
+        .order_by_desc(entry::Column::EntryId)
+        .limit(limit)
+        .all(db)
+        .await?;
+
+    Ok(entries)
+}

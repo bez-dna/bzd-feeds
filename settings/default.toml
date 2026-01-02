@@ -10,6 +10,9 @@ endpoint = "postgres://postgres:postgres@0.0.0.0:5432/bzd_feeds"
 endpoint = "0.0.0.0:4222"
 stream = "bzd"
 
+[feeds.limits]
+user = 10
+
 [feeds.messaging.message]
 subjects = ["bzd.messages.events.message"]
 consumer = "bzd-feeds-message"

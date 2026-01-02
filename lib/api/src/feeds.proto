@@ -1,0 +1,18 @@
+syntax = "proto3";
+package bzd.feeds.feeds;
+
+import "google/protobuf/timestamp.proto";
+
+service FeedsService {
+    rpc GetUserEntries(GetUserEntriesRequest) returns (GetUserEntriesResponse);
+}
+
+message GetUserEntriesRequest {
+    optional string user_id = 101;
+    optional string cursor_entry_id = 102;
+}
+
+message GetUserEntriesResponse {
+    repeated string message_ids = 101;
+    optional string cursor_entry_id = 102;
+}

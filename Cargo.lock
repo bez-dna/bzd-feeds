@@ -514,6 +514,7 @@ version = "0.0.0"
 dependencies = [
  "async-nats",
  "axum",
+ "bzd-feeds-api",
  "bzd-lib",
  "bzd-messages-api",
  "chrono",
@@ -535,6 +536,18 @@ dependencies = [
  "tracing",
  "uuid",
  "validator",
+]
+
+[[package]]
+name = "bzd-feeds-api"
+version = "0.0.0"
+dependencies = [
+ "bzd-lib",
+ "prost",
+ "prost-types",
+ "tonic",
+ "tonic-prost",
+ "tonic-prost-build",
 ]
 
 [[package]]

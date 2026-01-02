@@ -27,6 +27,11 @@ impl Model {
             updated_at: now,
         }
     }
+
+    #[cfg(test)]
+    pub fn stub() -> Self {
+        Model::new(Uuid::now_v7(), Uuid::now_v7(), vec![])
+    }
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

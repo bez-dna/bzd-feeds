@@ -28,9 +28,10 @@ pub async fn run() -> Result<(), Error> {
     Ok(())
 }
 
-async fn http_and_grpc(_state: &AppState, settings: &HttpSettings) -> Result<(), Error> {
+async fn http_and_grpc(state: &AppState, settings: &HttpSettings) -> Result<(), Error> {
     let reflection_service = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(tonic_health::pb::FILE_DESCRIPTOR_SET)
+        .register_encoded_file_descriptor_set(bzd_feeds_api::feeds::DESCRIPTOR)
         .build_v1alpha()?;
 
     let (_, health_service) = tonic_health::server::health_reporter();
@@ -40,6 +41,7 @@ async fn http_and_grpc(_state: &AppState, settings: &HttpSettings) -> Result<(),
     let router = routes
         .add_service(reflection_service)
         .add_service(health_service)
+        .add_service(feeds::service(state))
         .into_axum_router();
 
     let listener = tokio::net::TcpListener::bind(&settings.endpoint).await?;
